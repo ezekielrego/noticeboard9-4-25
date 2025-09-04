@@ -2,6 +2,9 @@ import React from 'react';
 import { View } from 'react-native';
 import LoginPreview from './src/screens/LoginPreview';
 import HomeScreen from './src/screens/HomeScreen';
+import BusinessesScreen from './src/screens/BusinessesScreen';
+import EventsScreen from './src/screens/EventsScreen';
+import RestaurantsScreen from './src/screens/RestaurantsScreen';
 import AppLayout from './src/components/AppLayout';
 import SlideContainer from './src/components/SlideContainer';
 
@@ -14,9 +17,9 @@ export default function App() {
         <AppLayout activeTab={activeTab} onChangeTab={(tab) => { setActiveTab(tab); }}>
           <SlideContainer direction={'forward'}>
             {activeTab === 'home' && <HomeScreen />}
-            {activeTab === 'businesses' && <View />}
-            {activeTab === 'events' && <View />}
-            {activeTab === 'restaurants' && <View />}
+            {activeTab === 'businesses' && <BusinessesScreen />}
+            {activeTab === 'events' && <EventsScreen />}
+            {activeTab === 'restaurants' && <RestaurantsScreen />}
             {activeTab === 'account' && <View />}
           </SlideContainer>
         </AppLayout>
