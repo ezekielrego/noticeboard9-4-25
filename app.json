@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "ezekielrego",
     "name": "new_noticeboard",
     "slug": "new_noticeboard",
     "version": "1.0.0",
@@ -16,6 +17,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.ezekielrego.newnoticeboard",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -24,6 +26,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5db5fdb1-c4e3-4ce6-b8bc-f316b8a28b4c"
+      }
     }
   }
 }

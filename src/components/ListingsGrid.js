@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text } from 'react-native';
+import React, { useState, useEffect, useCallback, memo } from 'react';
+import { View, Text, ActivityIndicator, FlatList } from 'react-native';
 import ListingCard from './ListingCard';
 
 const chunkIntoRows = (items, columns = 2) => {
@@ -10,27 +10,51 @@ const chunkIntoRows = (items, columns = 2) => {
   return rows;
 };
 
-export default function ListingsGrid({ title, data, onPressItem }) {
-  const rows = chunkIntoRows(data, 2);
+const ListingsGrid = memo(({ title, data, onPressItem, onLikePress, onLoadMore, hasMore, loading }) => {
+  const [displayedItems, setDisplayedItems] = useState([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  useEffect(() => {
+    setDisplayedItems(Array.isArray(data) ? data.filter(Boolean) : []);
+  }, [data]);
+
+  const handleEndReached = async () => {
+    if (hasMore && !isLoadingMore && onLoadMore) {
+      setIsLoadingMore(true);
+      try { await onLoadMore(); } finally { setIsLoadingMore(false); }
+    }
+  };
+
+  const renderItem = useCallback(({ item }) => (
+    <View style={{ width: '50%', paddingHorizontal: 4, marginBottom: 12 }}>
+      <ListingCard item={item} onPress={onPressItem} onLikePress={onLikePress} />
+    </View>
+  ), [onPressItem, onLikePress]);
+
+  const keyExtractor = useCallback((item, index) => `${item?.id ?? 'i'}-${index}`, []);
+
+  // Convert to 2-column layout via numColumns
   return (
-    <View style={{ marginTop: 12 }}>
+    <View style={{ marginTop: 0 }}>
       {!!title && (
         <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827', marginHorizontal: 12, marginBottom: 8 }}>{title}</Text>
       )}
-      <View style={{ paddingHorizontal: 8 }}>
-        {rows.map((row, rowIndex) => (
-          <View key={`row-${rowIndex}`} style={{ flexDirection: 'row', marginBottom: 12 }}>
-            {row.map((item, colIndex) => (
-              <View key={`${item.id || item.title}-${colIndex}`} style={{ flex: 1, paddingHorizontal: 4 }}>
-                <ListingCard item={item} onPress={onPressItem} />
-              </View>
-            ))}
-            {row.length === 1 && <View style={{ flex: 1, paddingHorizontal: 4 }} />}
+      <FlatList
+        contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 8 }}
+        data={displayedItems}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        numColumns={2}
+        onEndReachedThreshold={0.4}
+        onEndReached={handleEndReached}
+        ListFooterComponent={hasMore ? (
+          <View style={{ alignItems: 'center', marginVertical: 16 }}>
+            {isLoadingMore || loading ? <ActivityIndicator size="small" color="#0b0c10" /> : null}
           </View>
-        ))}
-      </View>
+        ) : null}
+      />
     </View>
   );
-}
+});
 
-
+export default ListingsGrid;

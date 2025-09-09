@@ -1,18 +1,146 @@
-import React from 'react';
-import { ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import ListingsGrid from '../components/ListingsGrid';
+import { listingsApi, getCachedListings, setCachedListings, CACHE_KEY_BUSINESS } from '../services/api';
+import { getLikesCount } from '../services/social';
+import { mapListingsResponse } from '../utils/dataMapper';
+import ErrorToast from '../components/ErrorToast';
 
-export default function BusinessesScreen() {
-  const sample = [
-    { id: 'b1', title: 'Venetian Blinds Fitters (VBF)', subtitle: 'Transform your space', image: 'https://images.unsplash.com/photo-1582582621952-0d00f1b0a3d7?q=80&w=1200&auto=format&fit=crop', logo: 'https://images.unsplash.com/photo-1543109740-4bdbf6f0efc1?q=80&w=256&auto=format&fit=crop', verified: true, location: 'Eastlea, Harare' },
-    { id: 'b2', title: 'R&D Plumbing', subtitle: 'Reliable and experienced', image: 'https://images.unsplash.com/photo-1581090464777-f3220bbe1b8b?q=80&w=1200&auto=format&fit=crop', logo: 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=256&auto=format&fit=crop', verified: true, location: 'Harare' },
-    { id: 'b3', title: 'Aluminium Works', subtitle: 'Premium window solutions', image: 'https://images.unsplash.com/photo-1582582621952-0d00f1b0a3d7?q=80&w=1200&auto=format&fit=crop', logo: 'https://images.unsplash.com/photo-1556157382-97eda2d62296?q=80&w=256&auto=format&fit=crop', verified: false, location: 'Avondale' },
-    { id: 'b4', title: 'Home Renovations', subtitle: 'Remodeling and design', image: 'https://images.unsplash.com/photo-1501183638710-841dd1904471?q=80&w=1200&auto=format&fit=crop', logo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=256&auto=format&fit=crop', verified: true, location: 'Borrowdale' },
-  ];
+export default function BusinessesScreen({ navigation }) {
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const didInit = useRef(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('error');
+
+  useEffect(() => {
+    (async () => {
+      const cached = await getCachedListings(CACHE_KEY_BUSINESS);
+      if (cached && cached.length) {
+        setListings(cached);
+        setLoading(false);
+      }
+      if (!didInit.current) {
+        didInit.current = true;
+        // background refresh but only if we don't already have fresh items
+        fetchBusinesses();
+      }
+    })();
+  }, []);
+
+  const fetchBusinesses = async (pageNum = 1) => {
+    try {
+      if (pageNum === 1) {
+        setLoading(true);
+        setError(null);
+      }
+      
+      const response = await listingsApi.getListings({ 
+        postType: 'listing', 
+        postsPerPage: 20,
+        page: pageNum
+      });
+      const data = mapListingsResponse(response);
+
+      if (pageNum > 1) {
+        for (const item of data.listings) {
+          setListings(prev => [...prev, item]);
+          await new Promise(r => setTimeout(r, 0));
+        }
+        try {
+          const ids = (data.listings || []).map(x => Number(x.id)).filter(Boolean);
+          await Promise.allSettled(ids.map(id => getLikesCount(id)));
+        } catch (_) {}
+      } else {
+        let first = [];
+        for (const item of data.listings) {
+          first.push(item);
+          setListings([...first]);
+          await new Promise(r => setTimeout(r, 0));
+        }
+        setCachedListings(CACHE_KEY_BUSINESS, data.listings);
+        try {
+          const ids = (data.listings || []).map(x => Number(x.id)).filter(Boolean);
+          await Promise.allSettled(ids.map(id => getLikesCount(id)));
+        } catch (_) {}
+      }
+      setHasMore(data.hasMore);
+      setPage(data.nextPage || pageNum + 1);
+      
+    } catch (err) {
+      // keep cached items and show toast
+      setError('Failed to load businesses');
+      setToastMessage('Poor network. Showing cached businesses');
+      setToastType('error');
+      setToastVisible(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMore = () => {
+    fetchBusinesses(page);
+  };
+
+  const handleItemPress = (item) => {
+    navigation.navigate('PostDetail', { listingId: item.id, listing: item });
+  };
+
+  const handleLikePress = (listingId, action) => {
+    if (action === 'comment') {
+      const listing = listings.find(it => it.id === listingId);
+      if (listing) {
+        navigation.navigate('Comments', { listingId: listing.id, listingTitle: listing.title });
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f6fa' }}>
+        <ActivityIndicator size="large" color="#0b0c10" />
+        <Text style={{ marginTop: 10, color: '#6b7280' }}>Loading businesses...</Text>
+      </View>
+    );
+  }
+
+  // Only show the error screen if we have no cached data to display
+  if (error && (!listings || listings.length === 0)) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f6fa', paddingHorizontal: 24 }}>
+        <Text style={{ fontSize: 56, marginBottom: 12 }}>📡</Text>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 6 }}>
+          No internet connection
+        </Text>
+        <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 16 }}>
+          Please check your network and try again.
+        </Text>
+        <TouchableOpacity onPress={() => fetchBusinesses(1)} activeOpacity={0.8}>
+          <View style={{ backgroundColor: '#111827', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
+            <Text style={{ color: 'white', fontWeight: '600' }}>Retry</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f5f6fa' }} contentContainerStyle={{ paddingVertical: 8 }}>
-      <ListingsGrid title="Businesses" data={sample} onPressItem={() => {}} />
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: '#f5f6fa' }}>
+      <ListingsGrid 
+        title="Businesses" 
+        data={listings} 
+        onPressItem={handleItemPress}
+        onLikePress={handleLikePress}
+        onLoadMore={loadMore}
+        hasMore={hasMore}
+        loading={loading}
+      />
+      <ErrorToast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} />
+    </View>
   );
 }
 

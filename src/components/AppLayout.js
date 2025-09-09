@@ -1,20 +1,32 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TopBar from './TopBar';
 import BottomTabs from './BottomTabs';
 
-export default function AppLayout({ activeTab, onChangeTab, children }) {
+export default function AppLayout({ activeTab, onChangeTab, children, onSearch }) {
+  const [isSearching, setIsSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  
+  const handleCancelSearch = () => {
+    setIsSearching(false);
+    setQuery('');
+  };
+  
   return (
-    <SafeAreaProvider>
-      <View style={{ flex: 1, backgroundColor: '#f5f6fa' }}>
-        <TopBar onPressSearch={() => {}} />
-        <View style={{ flex: 1 }}>
-          {children}
-        </View>
-        <BottomTabs current={activeTab} onChange={onChangeTab} />
+    <View style={{ flex: 1, backgroundColor: '#f5f6fa' }}>
+      <TopBar
+        onPressSearch={() => setIsSearching(true)}
+        isSearching={isSearching}
+        query={query}
+        onChangeQuery={setQuery}
+        onSubmitQuery={() => { onSearch && onSearch(query); setIsSearching(false); }}
+        onCancelSearch={handleCancelSearch}
+      />
+      <View style={{ flex: 1 }}>
+        {children}
       </View>
-    </SafeAreaProvider>
+      <BottomTabs current={activeTab} onChange={onChangeTab} />
+    </View>
   );
 }
 
