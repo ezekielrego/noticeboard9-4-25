@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, Alert } from 'react-native';
 import FormFirstLogin from '../../legacy/app/components/dumbs/FormFirstLogin';
+import ErrorToast from '../components/ErrorToast';
 import { signupWithPassword } from '../services/auth';
 
 export default function RegisterScreen({ navigation }) {
@@ -14,12 +15,23 @@ export default function RegisterScreen({ navigation }) {
     try {
       setLoading(true);
       setError('');
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(String(username).toLowerCase())) {
+        setError('Please enter a valid email address');
+        return;
+      }
       const res = await signupWithPassword({ email: username, password });
       if (res.status === 'success') {
         navigation.navigate && navigation.navigate('verify', { email: username });
       } else {
-        setError(res.message || 'Registration failed');
+        const msg = res.message || res.msg || '';
+        if (/exist/i.test(msg)) setError('This email is already registered');
+        else if (/weak/i.test(msg) || /password/i.test(msg)) setError('Please choose a stronger password');
+        else if (!msg) setError('Registration failed. Please try again.');
+        else setError(msg);
       }
+    } catch (e) {
+      setError('Network error. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -27,11 +39,7 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <View style={{ flex: 1 }}>
-      {!!error && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: 'rgba(239,68,68,0.9)', zIndex: 10 }}>
-          <Text style={{ color: '#fff', textAlign: 'center' }}>{error}</Text>
-        </View>
-      )}
+      <ErrorToast visible={!!error} message={error || ''} type="error" onHide={() => setError('')} />
       <FormFirstLogin
         navigation={{ navigate: () => {} }}
         onLogin={handleRegister}
@@ -40,11 +48,11 @@ export default function RegisterScreen({ navigation }) {
         onNavigateRegister={() => {}}
         onSkip={() => navigation.enterApp && navigation.enterApp()}
         onClickGetOtp={undefined}
-        colorPrimary="#ff4d4f"
+        colorPrimary="transparent"
         translations={{
           username: 'Email',
           password: 'Password',
-          login: 'Create account',
+          login: loading ? 'Please wait…' : 'Create account',
           register: 'Register',
           lostPassword: 'Back',
           getOtp: '',

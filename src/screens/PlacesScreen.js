@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
 import ListingsGrid from '../components/ListingsGrid';
-import { listingsApi, getCachedListings, setCachedListings, CACHE_KEY_RESTAURANT } from '../services/api';
-import { getLikesCount } from '../services/social';
+import { listingsApi, getCachedListings, setCachedListings, CACHE_KEY_PLACES } from '../services/api';
 import { mapListingsResponse } from '../utils/dataMapper';
 import ErrorToast from '../components/ErrorToast';
 
-import { loadSession } from '../services/auth';
-
-export default function RestaurantsScreen({ navigation, isAuthenticated, onNeedLogin }) {
+export default function PlacesScreen({ navigation, isAuthenticated, onNeedLogin }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,50 +13,58 @@ export default function RestaurantsScreen({ navigation, isAuthenticated, onNeedL
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
-  const [hasShownNetworkToast, setHasShownNetworkToast] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const cached = await getCachedListings(CACHE_KEY_RESTAURANT);
+      const cached = await getCachedListings(CACHE_KEY_PLACES);
       if (cached && cached.length) {
         setListings(cached);
         setLoading(false);
       }
       if (!didInit.current) {
         didInit.current = true;
-        fetchRestaurants();
+        fetchPlaces();
       }
     })();
   }, []);
 
-  const fetchRestaurants = async () => {
+  const fetchPlaces = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await listingsApi.getListings({ postType: 'restaurant', postsPerPage: 20 });
-      const data = mapListingsResponse(response);
-      // incremental to ease UI
+      const calls = [
+        listingsApi.getListings({ postType: 'renthouse', postsPerPage: 20, page: 1 }),
+        listingsApi.getListings({ postType: 'renthouse', postsPerPage: 20, page: 2 }),
+        listingsApi.getListings({ postType: 'listing', listing_cat: 'accommodation', postsPerPage: 20, page: 1 }),
+        listingsApi.getListings({ postType: 'listing', listing_cat: 'accommodation', postsPerPage: 20, page: 2 })
+      ];
+      const pages = await Promise.allSettled(calls);
+      const merged = [];
+      for (const p of pages) {
+        if (p.status === 'fulfilled') {
+          const mapped = mapListingsResponse(p.value).listings || [];
+          merged.push(...mapped);
+        }
+      }
+      const seen = new Set();
+      const unique = merged.filter(it => {
+        const key = String(it.id || '');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       let first = [];
-      for (const item of data.listings) {
+      for (const item of unique) {
         first.push(item);
         setListings([...first]);
         await new Promise(r => setTimeout(r, 0));
       }
-      setCachedListings(CACHE_KEY_RESTAURANT, data.listings);
-      try {
-        const ids = (data.listings || []).map(x => Number(x.id)).filter(Boolean);
-        await Promise.allSettled(ids.map(id => getLikesCount(id)));
-      } catch (_) {}
-      
+      setCachedListings(CACHE_KEY_PLACES, unique);
     } catch (err) {
-      setError('Failed to load restaurants');
-      if (!hasShownNetworkToast) {
-        setToastMessage('Poor or no network connection');
-        setToastType('error');
-        setToastVisible(true);
-        setHasShownNetworkToast(true);
-      }
+      setError('Failed to load places');
+      setToastMessage('Poor or no network connection');
+      setToastType('error');
+      setToastVisible(true);
     } finally {
       setLoading(false);
     }
@@ -69,20 +74,11 @@ export default function RestaurantsScreen({ navigation, isAuthenticated, onNeedL
     navigation.navigate('PostDetail', { listingId: item.id, listing: item });
   };
 
-  const handleLikePress = (listingId, action) => {
-    if (action === 'comment') {
-      const listing = listings.find(it => it.id === listingId);
-      if (listing) {
-        navigation.navigate('Comments', { listingId: listing.id, listingTitle: listing.title });
-      }
-    }
-  };
-
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f6fa' }}>
         <ActivityIndicator size="large" color="#0b0c10" />
-        <Text style={{ marginTop: 10, color: '#6b7280' }}>Loading restaurants...</Text>
+        <Text style={{ marginTop: 10, color: '#6b7280' }}>Loading places...</Text>
       </View>
     );
   }
@@ -97,7 +93,7 @@ export default function RestaurantsScreen({ navigation, isAuthenticated, onNeedL
         <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', marginBottom: 16 }}>
           Please check your network and try again.
         </Text>
-        <TouchableOpacity onPress={() => fetchRestaurants()} activeOpacity={0.8}>
+        <TouchableOpacity onPress={() => fetchPlaces()} activeOpacity={0.8}>
           <View style={{ backgroundColor: '#111827', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }}>
             <Text style={{ color: 'white', fontWeight: '600' }}>Retry</Text>
           </View>
@@ -108,10 +104,8 @@ export default function RestaurantsScreen({ navigation, isAuthenticated, onNeedL
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f6fa' }}>
-      <ListingsGrid title="Restaurants and Bars" data={listings} onPressItem={handleItemPress} onLikePress={handleLikePress} isAuthenticated={isAuthenticated} onNeedLogin={(action) => onNeedLogin && onNeedLogin(action)} />
+      <ListingsGrid title="Places" data={listings} onPressItem={handleItemPress} isAuthenticated={isAuthenticated} onNeedLogin={(action) => onNeedLogin && onNeedLogin(action)} />
       <ErrorToast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} />
     </View>
   );
 }
-
-

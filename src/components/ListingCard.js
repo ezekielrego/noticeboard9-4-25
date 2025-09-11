@@ -3,7 +3,7 @@ import { View, Text, Image, TouchableOpacity, Animated, Alert } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { likeListing, getLikesCount, checkUserLike } from '../services/social';
 
-const ListingCard = memo(({ item, onPress, onLikePress }) => {
+const ListingCard = memo(({ item, onPress, onLikePress, isAuthenticated, onNeedLogin }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
@@ -28,6 +28,10 @@ const ListingCard = memo(({ item, onPress, onLikePress }) => {
   };
 
   const handleLike = async () => {
+    if (!isAuthenticated && onNeedLogin) {
+      onNeedLogin('like');
+      return;
+    }
     if (isLiking) return;
     
     setIsLiking(true);
@@ -62,6 +66,11 @@ const ListingCard = memo(({ item, onPress, onLikePress }) => {
             </View>
           )}
           <View style={{ position: 'absolute', top: 8, right: 8, flexDirection: 'row', alignItems: 'center' }}>
+            {item.isPremium && (
+              <View style={{ backgroundColor: '#f59e0b', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, marginRight: 6 }}>
+                <Text style={{ color: '#111827', fontSize: 11, fontWeight: '700' }}>Sponsored</Text>
+              </View>
+            )}
             {item.verified && (
               <View style={{ backgroundColor: '#3ecf8e', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, marginRight: 6 }}>
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Verified</Text>
@@ -110,7 +119,9 @@ const ListingCard = memo(({ item, onPress, onLikePress }) => {
                   </View>
                 </TouchableOpacity>
                 <View style={{ width: 10 }} />
-                <TouchableOpacity onPress={() => onLikePress && onLikePress(item.id, 'comment')} accessibilityLabel="Comment" hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <TouchableOpacity onPress={() => {
+                  onLikePress && onLikePress(item.id, 'comment');
+                }} accessibilityLabel="Comment" hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   <Ionicons name="chatbubble-ellipses-outline" size={18} color="#6b7280" />
                 </TouchableOpacity>
               </View>

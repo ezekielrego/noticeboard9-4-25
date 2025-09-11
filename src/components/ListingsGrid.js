@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, Text, ActivityIndicator, FlatList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ListingCard from './ListingCard';
 
 const chunkIntoRows = (items, columns = 2) => {
@@ -10,9 +11,10 @@ const chunkIntoRows = (items, columns = 2) => {
   return rows;
 };
 
-const ListingsGrid = memo(({ title, data, onPressItem, onLikePress, onLoadMore, hasMore, loading }) => {
+const ListingsGrid = memo(({ title, data, onPressItem, onLikePress, onLoadMore, hasMore, loading, isAuthenticated, onNeedLogin }) => {
   const [displayedItems, setDisplayedItems] = useState([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     setDisplayedItems(Array.isArray(data) ? data.filter(Boolean) : []);
@@ -27,9 +29,15 @@ const ListingsGrid = memo(({ title, data, onPressItem, onLikePress, onLoadMore, 
 
   const renderItem = useCallback(({ item }) => (
     <View style={{ width: '50%', paddingHorizontal: 4, marginBottom: 12 }}>
-      <ListingCard item={item} onPress={onPressItem} onLikePress={onLikePress} />
+      <ListingCard 
+        item={item} 
+        onPress={onPressItem} 
+        onLikePress={onLikePress}
+        isAuthenticated={isAuthenticated}
+        onNeedLogin={onNeedLogin}
+      />
     </View>
-  ), [onPressItem, onLikePress]);
+  ), [onPressItem, onLikePress, isAuthenticated, onNeedLogin]);
 
   const keyExtractor = useCallback((item, index) => `${item?.id ?? 'i'}-${index}`, []);
 
@@ -40,18 +48,20 @@ const ListingsGrid = memo(({ title, data, onPressItem, onLikePress, onLoadMore, 
         <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827', marginHorizontal: 12, marginBottom: 8 }}>{title}</Text>
       )}
       <FlatList
-        contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 8, paddingTop: 8, paddingBottom: Math.max(48, 28 + insets.bottom + 12) }}
         data={displayedItems}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         numColumns={2}
         onEndReachedThreshold={0.4}
         onEndReached={handleEndReached}
-        ListFooterComponent={hasMore ? (
-          <View style={{ alignItems: 'center', marginVertical: 16 }}>
-            {isLoadingMore || loading ? <ActivityIndicator size="small" color="#0b0c10" /> : null}
+        ListFooterComponent={(
+          <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+            {hasMore && (isLoadingMore || loading) ? (
+              <ActivityIndicator size="small" color="#0b0c10" />
+            ) : null}
           </View>
-        ) : null}
+        )}
       />
     </View>
   );

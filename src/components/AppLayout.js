@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import TopBar from './TopBar';
 import BottomTabs from './BottomTabs';
 
-export default function AppLayout({ activeTab, onChangeTab, children, onSearch }) {
+export default function AppLayout({ activeTab, onChangeTab, children, onSearch, hideTopBar }) {
   const [isSearching, setIsSearching] = useState(false);
   const [query, setQuery] = useState('');
   
@@ -14,14 +14,16 @@ export default function AppLayout({ activeTab, onChangeTab, children, onSearch }
   
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f6fa' }}>
-      <TopBar
-        onPressSearch={() => setIsSearching(true)}
-        isSearching={isSearching}
-        query={query}
-        onChangeQuery={setQuery}
-        onSubmitQuery={() => { onSearch && onSearch(query); setIsSearching(false); }}
-        onCancelSearch={handleCancelSearch}
-      />
+      {!hideTopBar && (
+        <TopBar
+          onPressSearch={() => setIsSearching(true)}
+          isSearching={isSearching}
+          query={query}
+          onChangeQuery={setQuery}
+          onSubmitQuery={() => { onSearch && onSearch(query); setIsSearching(false); }}
+          onCancelSearch={handleCancelSearch}
+        />
+      )}
       <View style={{ flex: 1 }}>
         {children}
       </View>

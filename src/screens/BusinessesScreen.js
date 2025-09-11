@@ -6,7 +6,9 @@ import { getLikesCount } from '../services/social';
 import { mapListingsResponse } from '../utils/dataMapper';
 import ErrorToast from '../components/ErrorToast';
 
-export default function BusinessesScreen({ navigation }) {
+import { loadSession } from '../services/auth';
+
+export default function BusinessesScreen({ navigation, isAuthenticated, onNeedLogin }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,6 +18,7 @@ export default function BusinessesScreen({ navigation }) {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
+  const [hasShownNetworkToast, setHasShownNetworkToast] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -48,7 +51,16 @@ export default function BusinessesScreen({ navigation }) {
 
       if (pageNum > 1) {
         for (const item of data.listings) {
-          setListings(prev => [...prev, item]);
+          setListings(prev => {
+            const combined = [...prev, item];
+            const seen = new Set();
+            return combined.filter(it => {
+              const key = String(it?.id ?? '');
+              if (!key || seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+          });
           await new Promise(r => setTimeout(r, 0));
         }
         try {
@@ -59,7 +71,15 @@ export default function BusinessesScreen({ navigation }) {
         let first = [];
         for (const item of data.listings) {
           first.push(item);
-          setListings([...first]);
+          // de-dupe as we stream the initial set as well
+          const seen = new Set();
+          const unique = first.filter(it => {
+            const key = String(it?.id ?? '');
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setListings([...unique]);
           await new Promise(r => setTimeout(r, 0));
         }
         setCachedListings(CACHE_KEY_BUSINESS, data.listings);
@@ -74,9 +94,12 @@ export default function BusinessesScreen({ navigation }) {
     } catch (err) {
       // keep cached items and show toast
       setError('Failed to load businesses');
-      setToastMessage('Poor network. Showing cached businesses');
-      setToastType('error');
-      setToastVisible(true);
+      if (!hasShownNetworkToast) {
+        setToastMessage('Poor or no network connection');
+        setToastType('error');
+        setToastVisible(true);
+        setHasShownNetworkToast(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -138,6 +161,8 @@ export default function BusinessesScreen({ navigation }) {
         onLoadMore={loadMore}
         hasMore={hasMore}
         loading={loading}
+        isAuthenticated={isAuthenticated}
+        onNeedLogin={(action) => onNeedLogin && onNeedLogin(action)}
       />
       <ErrorToast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} />
     </View>

@@ -32,6 +32,7 @@ const CACHE_KEY_HOME = 'cache_home_listings_v1';
 const CACHE_KEY_BUSINESS = 'cache_business_listings_v1';
 const CACHE_KEY_RESTAURANT = 'cache_restaurant_listings_v1';
 const CACHE_KEY_EVENTS = 'cache_event_listings_v1';
+const CACHE_KEY_PLACES = 'cache_places_listings_v1';
 
 export async function getCachedListings(key) {
   try {
@@ -70,6 +71,16 @@ export const listingsApi = {
     return response.data;
   },
 
+  getListingById: async (id, params = {}) => {
+    const defaultParams = {
+      site: 'default',
+      lang: 'en',
+      ...params,
+    };
+    const response = await api.get(`/listings/${id}`, { params: defaultParams });
+    return response.data;
+  },
+
   searchListings: async (keyword, params = {}) => {
     const defaultParams = {
       keyword,
@@ -83,8 +94,28 @@ export const listingsApi = {
     const response = await api.get('/listings/search', { params: defaultParams });
     return response.data;
   },
+
+  getListingPhotos: async (id, params = {}) => {
+    const defaultParams = {
+      site: 'default',
+      lang: 'en',
+      ...params,
+    };
+    const response = await api.get(`/listings/${id}/photos`, { params: defaultParams });
+    return response.data;
+  },
+
+  getListingVideos: async (id, params = {}) => {
+    const defaultParams = {
+      site: 'default',
+      lang: 'en',
+      ...params,
+    };
+    const response = await api.get(`/listings/${id}/videos`, { params: defaultParams });
+    return response.data;
+  },
 };
 
-export { CACHE_KEY_HOME, CACHE_KEY_BUSINESS, CACHE_KEY_RESTAURANT, CACHE_KEY_EVENTS };
+export { CACHE_KEY_HOME, CACHE_KEY_BUSINESS, CACHE_KEY_RESTAURANT, CACHE_KEY_EVENTS, CACHE_KEY_PLACES };
 
 export default api;

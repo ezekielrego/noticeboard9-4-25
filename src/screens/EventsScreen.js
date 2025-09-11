@@ -6,7 +6,9 @@ import { getLikesCount } from '../services/social';
 import { mapListingsResponse } from '../utils/dataMapper';
 import ErrorToast from '../components/ErrorToast';
 
-export default function EventsScreen({ navigation }) {
+import { loadSession } from '../services/auth';
+
+export default function EventsScreen({ navigation, isAuthenticated, onNeedLogin }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,6 +16,7 @@ export default function EventsScreen({ navigation }) {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
+  const [hasShownNetworkToast, setHasShownNetworkToast] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -33,18 +36,10 @@ export default function EventsScreen({ navigation }) {
     try {
       setLoading(true);
       setError(null);
-      
-      // Fetch Events + Accommodation-like content
-      const calls = [
+      const pages = await Promise.allSettled([
         listingsApi.getListings({ postType: 'event', postsPerPage: 20, page: 1 }),
-        listingsApi.getListings({ postType: 'event', postsPerPage: 20, page: 2 }),
-        // Accommodation style: try common postTypes/taxonomies used for rentals/places
-        listingsApi.getListings({ postType: 'renthouse', postsPerPage: 20, page: 1 }),
-        listingsApi.getListings({ postType: 'renthouse', postsPerPage: 20, page: 2 }),
-        listingsApi.getListings({ postType: 'listing', listing_cat: 'accommodation', postsPerPage: 20, page: 1 }),
-        listingsApi.getListings({ postType: 'listing', listing_cat: 'accommodation', postsPerPage: 20, page: 2 })
-      ];
-      const pages = await Promise.allSettled(calls);
+        listingsApi.getListings({ postType: 'event', postsPerPage: 20, page: 2 })
+      ]);
       const merged = [];
       for (const p of pages) {
         if (p.status === 'fulfilled') {
@@ -75,9 +70,12 @@ export default function EventsScreen({ navigation }) {
       
     } catch (err) {
       setError('Failed to load events');
-      setToastMessage('Poor network. Showing cached places & events');
-      setToastType('error');
-      setToastVisible(true);
+      if (!hasShownNetworkToast) {
+        setToastMessage('Poor or no network connection');
+        setToastType('error');
+        setToastVisible(true);
+        setHasShownNetworkToast(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -126,7 +124,7 @@ export default function EventsScreen({ navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f6fa' }}>
-      <ListingsGrid title="Places & Events" data={listings} onPressItem={handleItemPress} onLikePress={handleLikePress} />
+      <ListingsGrid title="Events" data={listings} onPressItem={handleItemPress} onLikePress={handleLikePress} isAuthenticated={isAuthenticated} onNeedLogin={(action) => onNeedLogin && onNeedLogin(action)} />
       <ErrorToast visible={toastVisible} message={toastMessage} type={toastType} onHide={() => setToastVisible(false)} />
     </View>
   );

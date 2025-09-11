@@ -1,9 +1,11 @@
 import { socialApi } from './api';
+import { ensureGuestIdentity } from './auth';
 
 // Likes functionality
 export const likeListing = async (listingId, action = 'like') => {
   try {
     if (!listingId) throw new Error('Missing listingId');
+    await ensureGuestIdentity();
     const { data } = await socialApi.post(`/listings/${listingId}/like`, { action });
     if (data.status !== 'success') throw new Error(data.message);
     return { liked: data.liked, likesCount: data.likesCount };
@@ -16,6 +18,7 @@ export const likeListing = async (listingId, action = 'like') => {
 export const getLikesCount = async (listingId) => {
   try {
     if (!listingId) throw new Error('Missing listingId');
+    await ensureGuestIdentity();
     const { data } = await socialApi.get(`/listings/${listingId}/likes/count`);
     if (data.status !== 'success') throw new Error(data.message);
     return data.likesCount;
@@ -28,6 +31,7 @@ export const getLikesCount = async (listingId) => {
 // Comments functionality
 export const addComment = async (listingId, text) => {
   try {
+    await ensureGuestIdentity();
     const { data } = await socialApi.post(`/listings/${listingId}/comments`, { text });
     if (data.status !== 'success') throw new Error(data.message);
     return data.comment;
@@ -39,6 +43,7 @@ export const addComment = async (listingId, text) => {
 
 export const getComments = async (listingId, cursor = null, limit = 20) => {
   try {
+    await ensureGuestIdentity();
     const params = { limit };
     if (cursor) params.cursor = cursor;
     
@@ -49,6 +54,21 @@ export const getComments = async (listingId, cursor = null, limit = 20) => {
     console.error('Error getting comments:', error);
     throw error;
   }
+};
+
+// Ratings
+export const getRating = async (listingId) => {
+  await ensureGuestIdentity();
+  const { data } = await socialApi.get(`/listings/${listingId}/rating`);
+  if (data.status !== 'success') throw new Error(data.message);
+  return { average: data.average, userRating: data.userRating };
+};
+
+export const submitRating = async (listingId, value) => {
+  await ensureGuestIdentity();
+  const { data } = await socialApi.post(`/listings/${listingId}/rating`, { value });
+  if (data.status !== 'success') throw new Error(data.message);
+  return { average: data.average, userRating: data.userRating };
 };
 
 // Check if user has liked a listing

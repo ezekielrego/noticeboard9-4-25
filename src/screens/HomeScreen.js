@@ -5,13 +5,16 @@ import ListingsGrid from '../components/ListingsGrid';
 import ErrorToast from '../components/ErrorToast';
 import { listingsApi, socialApi, getCachedListings, setCachedListings, CACHE_KEY_HOME } from '../services/api';
 import { getLikesCount } from '../services/social';
-import { mapListingsResponse } from '../utils/dataMapper';
+import { mapListingsResponse, mapListingData } from '../utils/dataMapper';
 
-export default function HomeScreen({ navigation, onSearch }) {
+import { loadSession } from '../services/auth';
+
+export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthenticated }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -20,6 +23,7 @@ export default function HomeScreen({ navigation, onSearch }) {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState('error');
+  const [hasShownNetworkToast, setHasShownNetworkToast] = useState(false);
 
 
   useEffect(() => {
@@ -41,65 +45,174 @@ export default function HomeScreen({ navigation, onSearch }) {
         setError(null);
       }
       
-      let maxIdSeen = 0;
-      // Mixed feed: pull latest business and restaurant, merge and sort by id desc
-      const [businessResponse, restaurantResponse] = await Promise.all([
-        listingsApi.getListings({ postType: 'listing', postsPerPage: 10, page: pageNum }),
-        listingsApi.getListings({ postType: 'restaurant', postsPerPage: 10, page: pageNum })
-      ]);
-      const businessData = mapListingsResponse(businessResponse);
-      const restaurantData = mapListingsResponse(restaurantResponse);
-      const mixed = [...businessData.listings, ...restaurantData.listings]
-        .filter(Boolean)
-        .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0))
-        .slice(0, 10);
+      let allListings = [];
+      let premiumIds = new Set();
 
-      // Incremental add for first page; append for next pages
+      // First, try to fetch premium listings
+      try {
+        const premiumResponse = await socialApi.get('/premium');
+        console.log('Premium API raw:', premiumResponse?.data);
+        if (premiumResponse.data.status === 'success' && Array.isArray(premiumResponse.data.data)) {
+          const premiumRaw = premiumResponse.data.data;
+
+          // Build promises preserving order: fetch details for numeric IDs, placeholders for name-only
+          const normalizeSingle = (listing) => {
+            if (!listing) return null;
+            try {
+              // Direct object
+              const direct = mapListingData(listing);
+              if (direct && direct.id) return direct;
+            } catch (_) {}
+            try {
+              // Wrapped under data
+              if (listing.data) {
+                const d = mapListingData(listing.data);
+                if (d && d.id) return d;
+              }
+            } catch (_) {}
+            try {
+              // Wilcity detail often under 'post'
+              if (listing.post) {
+                const p = mapListingData(listing.post);
+                if (p && p.id) return p;
+              }
+            } catch (_) {}
+            try {
+              // Sometimes oResults is array or object
+              if (Array.isArray(listing.oResults) && listing.oResults[0]) {
+                const a = mapListingData(listing.oResults[0]);
+                if (a && a.id) return a;
+              }
+              if (listing.oResults && !Array.isArray(listing.oResults) && typeof listing.oResults === 'object') {
+                const obj = mapListingData(listing.oResults);
+                if (obj && obj.id) return obj;
+              }
+              if (Array.isArray(listing.results) && listing.results[0]) {
+                const a = mapListingData(listing.results[0]);
+                if (a && a.id) return a;
+              }
+              if (Array.isArray(listing.data) && listing.data[0]) {
+                const a = mapListingData(listing.data[0]);
+                if (a && a.id) return a;
+              }
+            } catch (_) {}
+            return null;
+          };
+
+          const premiumPromises = premiumRaw.map(p => {
+            const numericId = Number(p.id);
+            if (Number.isFinite(numericId) && numericId > 0) {
+              return listingsApi.getListingById(numericId)
+                .then(listing => {
+                  console.log('Premium fetch by id raw:', numericId, listing);
+                  const mapped = normalizeSingle(listing);
+                  console.log('Premium fetch by id mapped:', numericId, mapped);
+                  return mapped;
+                })
+                .catch(() => null);
+            }
+            // Resolve by name: fetch search and pick exact case-insensitive match
+            const title = (p.title || '').trim();
+            if (!title) return Promise.resolve(null);
+            return listingsApi.searchListings(title)
+              .then(resp => {
+                console.log('Premium fetch by title raw:', title, resp);
+                const data = mapListingsResponse(resp);
+                const exact = (data.listings || []).find(l => (l.title || '').trim().toLowerCase() === title.toLowerCase());
+                console.log('Premium fetch by title mapped:', title, exact);
+                return exact || null;
+              })
+              .catch(() => null);
+          });
+
+          const premiumResults = await Promise.allSettled(premiumPromises);
+          const premiumItems = premiumResults
+            .map(r => (r.status === 'fulfilled' ? r.value : null))
+            .filter(it => it && (typeof it.id === 'string' || Number.isFinite(Number(it.id))))
+            .map(it => ({ ...it, isPremium: true }));
+
+          console.log('Premium resolved items:', premiumItems);
+
+          // Track numeric premium IDs to avoid duplicates in regular feed
+          premiumIds = new Set(
+            premiumItems
+              .map(it => Number(it.id))
+              .filter(id => Number.isFinite(id) && id > 0)
+          );
+
+          allListings = premiumItems;
+        }
+      } catch (err) {
+        console.log('Premium listings fetch failed:', err);
+      }
+
+      // Then fetch regular listings
+      const response = await listingsApi.getListings({ 
+        postType: 'listing', 
+        postsPerPage: 20,
+        page: pageNum
+      });
+      const data = mapListingsResponse(response);
+
+      // Filter out premium listings from regular feed to avoid duplicates
+      const regularListings = data.listings.filter(item => !premiumIds.has(Number(item.id)));
+      
+      // Combine premium + regular listings
+      const combinedListings = [...allListings, ...regularListings];
+
       if (pageNum > 1) {
-        for (const it of mixed) {
-          setItems(prev => [...prev, it]);
+        // Append incrementally to keep UI responsive
+        for (const item of combinedListings) {
+        setItems(prev => {
+            const combined = [...prev, item];
+          const seen = new Set();
+            return combined.filter(it => {
+            const key = String(it?.id ?? '');
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        });
           await new Promise(r => setTimeout(r, 0));
         }
-        // Fire-and-forget: ensure listings exist in NoticeAPI for likes/comments
         try {
-          const ids = mixed.map(x => Number(x.id)).filter(Boolean);
+          const ids = (combinedListings || []).map(x => Number(x.id)).filter(Boolean);
           await Promise.allSettled(ids.map(id => getLikesCount(id)));
         } catch (_) {}
       } else {
+        // Initial set with caching
         let first = [];
-        for (const it of mixed) {
-          first.push(it);
+        for (const item of combinedListings) {
+          first.push(item);
           setItems([...first]);
           await new Promise(r => setTimeout(r, 0));
         }
-        // cache first page payload for fast relaunch
-        setCachedListings(CACHE_KEY_HOME, mixed);
-        // Fire-and-forget: ensure listings exist in NoticeAPI for likes/comments
+        setCachedListings(CACHE_KEY_HOME, combinedListings);
         try {
-          const ids = mixed.map(x => Number(x.id)).filter(Boolean);
+          const ids = (combinedListings || []).map(x => Number(x.id)).filter(Boolean);
           await Promise.allSettled(ids.map(id => getLikesCount(id)));
         } catch (_) {}
       }
-      setHasMore(!!(businessData.hasMore || restaurantData.hasMore));
-      setPage((businessData.nextPage && restaurantData.nextPage) ? Math.min(businessData.nextPage, restaurantData.nextPage) : pageNum + 1);
-      if (mixed.length) {
-        maxIdSeen = Math.max(...mixed.map(it => Number(it.id) || 0));
-      }
-      
-      // Signal our API to sync new listings based on the newest ID we just saw
-      // Removed failing non-existent sync call
+      setHasMore(data.hasMore);
+      setPage(data.nextPage || pageNum + 1);
 
     } catch (err) {
       console.error('Error fetching listings:', err);
       setError('Failed to load listings');
-      showToast('Poor network connection. Please check your internet and try again.', 'error');
+      if (!hasShownNetworkToast) {
+        showToast('Poor or no network connection', 'error');
+        setHasShownNetworkToast(true);
+      }
     } finally {
       setLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
   const loadMore = () => {
-    if (hasMore && !isSearching) fetchListings(page);
+    if (!hasMore || isSearching || isLoadingMore) return;
+    setIsLoadingMore(true);
+    fetchListings(page);
   };
 
   const handleItemPress = (item) => {
@@ -208,7 +321,9 @@ export default function HomeScreen({ navigation, onSearch }) {
           onLikePress={handleLikePress}
           onLoadMore={isSearching ? null : loadMore}
           hasMore={isSearching ? false : hasMore}
-          loading={loading}
+          loading={loading || isLoadingMore}
+          isAuthenticated={isAuthenticated}
+          onNeedLogin={(action) => requireLogin && requireLogin(action)}
         />
       )}
 

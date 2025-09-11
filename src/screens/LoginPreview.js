@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import ErrorToast from '../components/ErrorToast';
 import FormFirstLogin from '../../legacy/app/components/dumbs/FormFirstLogin';
 import { loginWithPassword } from '../services/auth';
 
@@ -12,12 +13,27 @@ export default function LoginPreview({ onSkip, onNavigateRegister }) {
     try {
       setLoading(true);
       setError('');
+      // Basic email format check if input looks like an email
+      const looksLikeEmail = /@/.test(String(username));
+      if (looksLikeEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(String(username).toLowerCase())) {
+          setError('Please enter a valid email address');
+          return;
+        }
+      }
       const res = await loginWithPassword({ username, password });
       if (res.status === 'success') {
         onSkip && onSkip();
       } else {
-        setError(res.message || res.msg || 'Invalid credentials');
+        const msg = res.message || res.msg || '';
+        if (/invalid/i.test(msg) || /credential/i.test(msg)) setError('Invalid email or password');
+        else if (/not found/i.test(msg) || /user/i.test(msg)) setError('Account not found');
+        else if (!msg) setError('Login failed. Please try again.');
+        else setError(msg);
       }
+    } catch (e) {
+      setError('Network error. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -29,11 +45,7 @@ export default function LoginPreview({ onSkip, onNavigateRegister }) {
 
   return (
     <View style={{ flex: 1 }}>
-      {!!error && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: 'rgba(239,68,68,0.9)', zIndex: 10 }}>
-          <Text style={{ color: '#fff', textAlign: 'center' }}>{error}</Text>
-        </View>
-      )}
+      <ErrorToast visible={!!error} message={error || ''} type="error" onHide={() => setError('')} />
       <FormFirstLogin
         navigation={{ navigate: () => {} }}
         onLogin={handleLogin}
@@ -41,11 +53,11 @@ export default function LoginPreview({ onSkip, onNavigateRegister }) {
         onNavigateRegister={handleRegisterNavigate}
         onSkip={onSkip}
         onClickGetOtp={undefined}
-        colorPrimary="#ff4d4f"
+        colorPrimary="transparent"
         translations={{
           username: 'Email or Username',
           password: 'Password',
-          login: 'Log in',
+          login: loading ? 'Please wait…' : 'Log in',
           register: 'Register',
           lostPassword: '',
           getOtp: '',

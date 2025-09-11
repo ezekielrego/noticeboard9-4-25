@@ -95,12 +95,8 @@ export default function AccountScreen({ navigation }) {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={[styles.profileHeader, { backgroundColor: colors.surface }]}>
-          <View style={[styles.avatarContainer, { backgroundColor: colors.surfaceSecondary }]}>
-            <Image 
-              source={require('../../assets/icon.png')} 
-              style={styles.avatar} 
-              resizeMode="contain" 
-            />
+          <View style={[styles.avatarContainer, { backgroundColor: '#0b0c10' }]}>
+            <Ionicons name="person" size={36} color="#ffffff" />
           </View>
           <Text style={[styles.userName, { color: colors.text }]}>
             {user?.displayName || 'User'}
@@ -110,6 +106,13 @@ export default function AccountScreen({ navigation }) {
           </Text>
         </View>
 
+        {/* Become author CTA */}
+        <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
+          <TouchableOpacity onPress={() => navigation.navigate && navigation.navigate('WebView', { url: 'https://noticeboard.co.zw', title: 'Become an Author' })} style={{ backgroundColor: '#0b0c10', borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 }}>
+            <Text style={{ color: '#ffffff', fontWeight: '700' }}>Become an author and create a listing</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Account Settings */}
         <View style={styles.section}>
           <SectionHeader title="Account" />
@@ -117,7 +120,11 @@ export default function AccountScreen({ navigation }) {
             icon="person-outline" 
             title="Profile" 
             subtitle="Edit your profile information"
-            onPress={() => Alert.alert('Profile', 'Profile editing coming soon!')}
+            onPress={async () => {
+              const { token } = await loadSession();
+              if (!token) { navigation?.requireLogin && navigation.requireLogin('account'); return; }
+              navigation.navigate && navigation.navigate('EditProfile');
+            }}
           />
           <AccountItem 
             icon="mail-outline" 
@@ -125,18 +132,13 @@ export default function AccountScreen({ navigation }) {
             subtitle={user?.email || 'user@example.com'}
             onPress={() => Alert.alert('Email', 'Email settings coming soon!')}
           />
-          <AccountItem 
-            icon="lock-closed-outline" 
-            title="Password" 
-            subtitle="Change your password"
-            onPress={() => Alert.alert('Password', 'Password change coming soon!')}
-          />
+          {/* Dark mode toggle removed */}
         </View>
 
         {/* App Settings */}
-        <View style={styles.section}>
-          <SectionHeader title="App Settings" />
-          <AccountItem 
+        {/* <View style={styles.section}>
+          <SectionHeader title="App Settings" /> */}
+          {/* <AccountItem 
             icon="moon-outline" 
             title="Dark Mode" 
             subtitle="Switch between light and dark themes"
@@ -149,20 +151,20 @@ export default function AccountScreen({ navigation }) {
               />
             }
             showArrow={false}
-          />
-          <AccountItem 
+          /> */}
+          {/* <AccountItem 
             icon="notifications-outline" 
             title="Notifications" 
             subtitle="Manage your notification preferences"
             onPress={() => Alert.alert('Notifications', 'Notification settings coming soon!')}
-          />
-          <AccountItem 
+          /> */}
+          {/* <AccountItem 
             icon="language-outline" 
             title="Language" 
             subtitle="English"
             onPress={() => Alert.alert('Language', 'Language selection coming soon!')}
-          />
-        </View>
+          /> */}
+        {/* </View> */}
 
         {/* Support */}
         <View style={styles.section}>
@@ -171,19 +173,19 @@ export default function AccountScreen({ navigation }) {
             icon="help-circle-outline" 
             title="Help & Support" 
             subtitle="Get help and contact support"
-            onPress={() => Alert.alert('Help', 'Help center coming soon!')}
+            onPress={() => navigation.navigate && navigation.navigate('HelpSupport')}
           />
           <AccountItem 
             icon="document-text-outline" 
             title="Terms of Service" 
             subtitle="Read our terms and conditions"
-            onPress={() => Alert.alert('Terms', 'Terms of service coming soon!')}
+            onPress={() => navigation.navigate && navigation.navigate('Terms')}
           />
           <AccountItem 
             icon="shield-checkmark-outline" 
             title="Privacy Policy" 
             subtitle="Learn about our privacy practices"
-            onPress={() => Alert.alert('Privacy', 'Privacy policy coming soon!')}
+            onPress={() => navigation.navigate && navigation.navigate('Privacy')}
           />
         </View>
 
@@ -193,14 +195,19 @@ export default function AccountScreen({ navigation }) {
           <AccountItem 
             icon="information-circle-outline" 
             title="App Version" 
-            subtitle="1.0.0"
+            subtitle="1.0.1"
             showArrow={false}
           />
           <AccountItem 
+            icon="information-circle-outline" 
+            title="About Developers" 
+            showArrow={true}
+          />
+          <AccountItem 
             icon="star-outline" 
-            title="Rate App" 
+            title="Update App" 
             subtitle="Rate us on the app store"
-            onPress={() => Alert.alert('Rate App', 'Rating coming soon!')}
+            onPress={() => Alert.alert('Update App', 'Update coming soon!')}
           />
         </View>
 

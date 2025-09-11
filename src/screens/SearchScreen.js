@@ -217,7 +217,17 @@ export default function SearchScreen({ route, navigation }) {
   }, []);
 
   const handleItemPress = (item) => {
-    navigation.navigate('PostDetail', { listingId: item.id, listing: item });
+    const params = { listingId: item.id, listing: item };
+    // Our App.js wires SearchScreen.navigation.navigate to a function that
+    // expects (params) and opens overlay detail via navigateToDetail
+    if (typeof navigation.navigate === 'function') {
+      try {
+        navigation.navigate(params);
+        return;
+      } catch (_) {}
+    }
+    // Fallbacks
+    if (navigation.navigate) navigation.navigate('PostDetail', params);
   };
 
   return (

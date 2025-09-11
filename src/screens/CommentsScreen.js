@@ -78,8 +78,8 @@ export default function CommentsScreen({ route, navigation }) {
   const TAB_HEIGHT = 56; // matches BottomTabs minHeight
   const HEADER_HEIGHT = 56; // our local header approx height
   const keyboardVisible = keyboardHeight > 0;
-  // Lift slightly less so it hugs the keyboard/top of tabs instead of floating too high
-  const baseLift = keyboardHeight - insets.bottom - TAB_HEIGHT - 114; // extra 24px damping
+  // Reduce lift by ~50% so the input stays closer to the bottom (corrected constant)
+  const baseLift = (keyboardHeight - insets.bottom - TAB_HEIGHT -1114) / 2; // half the previous lift
   const liftBy = Math.max(0, baseLift);
 
   return (
