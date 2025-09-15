@@ -1,9 +1,9 @@
 {
   "expo": {
     "owner": "ezekielrego",
-    "name": "new_noticeboard",
-    "slug": "new_noticeboard",
-    "version": "1.0.0",
+    "name": "noticeboard",
+    "slug": "noticeboard",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.ezekielrego.newnoticeboard",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "We use your location to help you search for nearby listings and places."
       }
     },
     "android": {
@@ -26,8 +27,15 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
+    "scheme": "noticeboard",
+    "deepLinkRouting": true,
     "web": {
       "favicon": "./assets/favicon.png"
     },

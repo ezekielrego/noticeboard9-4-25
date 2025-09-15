@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Keyboard, Modal, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getComments, addComment } from '../services/social';
+import { ensureGuestIdentity, setGuestName, loadSession } from '../services/auth';
 
 export default function CommentsScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
@@ -15,6 +16,8 @@ export default function CommentsScreen({ route, navigation }) {
   const [hasMore, setHasMore] = useState(true);
   const flatListRef = useRef(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [nameInput, setNameInput] = useState('');
 
   useEffect(() => {
     navigation.setOptions?.({ headerShown: false });
@@ -47,14 +50,24 @@ export default function CommentsScreen({ route, navigation }) {
 
   const handleSubmitComment = async () => {
     if (!newComment.trim() || submitting || !listingId) return;
+    // If user is not logged in, optionally prompt for a guest username first
+    const { token } = await loadSession();
+    if (!token) {
+      const { guestName } = await ensureGuestIdentity();
+      if (!guestName || guestName.startsWith('Guest-')) {
+        setNameInput('');
+        setShowNamePrompt(true);
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const comment = await addComment(listingId, newComment.trim());
       setComments(prev => [comment, ...prev]);
       setNewComment('');
       setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-    } catch (_) {
-      // noop
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to add comment');
     } finally {
       setSubmitting(false);
     }
@@ -84,6 +97,47 @@ export default function CommentsScreen({ route, navigation }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 48 : 48}>
+      {/* Optional guest username prompt */}
+      <Modal visible={showNamePrompt} transparent animationType="fade" onRequestClose={() => setShowNamePrompt(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <View style={{ width: '100%', maxWidth: 420, backgroundColor: '#fff', borderRadius: 12, padding: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#0b0c10', marginBottom: 8 }}>Choose a display name</Text>
+            <Text style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>Set a name to show with your comment. You can skip this and continue as guest.</Text>
+            <TextInput
+              value={nameInput}
+              onChangeText={setNameInput}
+              placeholder="e.g. Tino, Ama, GuestZim"
+              placeholderTextColor="#9ca3af"
+              style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: '#111827', marginBottom: 12 }}
+              autoFocus
+              maxLength={120}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity onPress={async () => {
+                // Skip: ensure headers set and proceed to submit
+                await ensureGuestIdentity();
+                setShowNamePrompt(false);
+                setTimeout(() => handleSubmitComment(), 50);
+              }} style={{ paddingVertical: 10, paddingHorizontal: 12, marginRight: 8 }}>
+                <Text style={{ color: '#6b7280', fontWeight: '600' }}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={async () => {
+                const proposed = nameInput.trim();
+                if (proposed.length > 0) {
+                  await setGuestName(proposed);
+                }
+                setShowNamePrompt(false);
+                setTimeout(() => handleSubmitComment(), 50);
+              }} style={{ paddingVertical: 10, paddingHorizontal: 14, backgroundColor: '#3b82f6', borderRadius: 8 }}>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Save & Post</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ marginTop: 10 }}>
+              <Text style={{ fontSize: 12, color: '#6b7280' }}>For more features, log in when you get a chance.</Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <View style={{ paddingTop: insets.top, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 8, marginRight: 8 }}>
           <Ionicons name="arrow-back" size={22} color="#0b0c10" />

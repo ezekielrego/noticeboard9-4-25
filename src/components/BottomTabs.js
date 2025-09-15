@@ -13,7 +13,7 @@ export default function BottomTabs({ current, onChange }) {
     { key: 'businesses', label: 'Business', icon: 'briefcase-outline', iconActive: 'briefcase' },
     { key: 'places', label: 'Places', icon: 'map-outline', iconActive: 'map' },
     { key: 'events', label: 'Events', icon: 'calendar-outline', iconActive: 'calendar' },
-    { key: 'restaurants', label: 'Resturant', icon: 'restaurant-outline', iconActive: 'restaurant' },
+    { key: 'restaurants', label: 'Restaurant', icon: 'restaurant-outline', iconActive: 'restaurant' },
     { key: 'account', label: 'Account', icon: 'person-circle-outline', iconActive: 'person-circle' },
   ];
   const [createPressed, setCreatePressed] = React.useState(false);

@@ -1,7 +1,21 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
-import { View, Text, Image, TouchableOpacity, Animated, Alert } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Animated, Alert, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { likeListing, getLikesCount, checkUserLike } from '../services/social';
+
+const formatLikesCount = (count) => {
+  const n = Number(count) || 0;
+  if (n >= 1000) {
+    const thousands = Math.floor(n / 1000);
+    const remainder = n - thousands * 1000;
+    if (remainder < 100) {
+      return `${thousands}k`;
+    }
+    const oneDecimal = Math.round(n / 100) / 10; // one decimal place
+    return `${oneDecimal.toFixed(1)}k`;
+  }
+  return `${n}`;
+};
 
 const ListingCard = memo(({ item, onPress, onLikePress, isAuthenticated, onNeedLogin }) => {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -28,10 +42,6 @@ const ListingCard = memo(({ item, onPress, onLikePress, isAuthenticated, onNeedL
   };
 
   const handleLike = async () => {
-    if (!isAuthenticated && onNeedLogin) {
-      onNeedLogin('like');
-      return;
-    }
     if (isLiking) return;
     
     setIsLiking(true);
@@ -76,7 +86,16 @@ const ListingCard = memo(({ item, onPress, onLikePress, isAuthenticated, onNeedL
                 <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Verified</Text>
               </View>
             )}
-            <TouchableOpacity onPress={() => {}} accessibilityLabel="Share" hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <TouchableOpacity onPress={async () => {
+              try {
+                const title = (item.title || '').toString();
+                const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+                const webUrl = slug ? `https://noticeboard.co.zw/${slug}` : 'https://noticeboard.co.zw/';
+                const appUrl = item.id ? `noticeboard://listing/${item.id}` : 'noticeboard://home';
+                const message = `Hey, check out my ${title} on https://noticeboard.co.zw/\n${webUrl}\n\nOpen in app: ${appUrl}`;
+                await Share.share({ message });
+              } catch (_) {}
+            }} accessibilityLabel="Share" hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
               <Ionicons name="share-social-outline" size={18} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -113,7 +132,7 @@ const ListingCard = memo(({ item, onPress, onLikePress, isAuthenticated, onNeedL
                         marginLeft: 4,
                         fontWeight: isLiked ? '600' : '400'
                       }}>
-                        {likesCount}
+                        {formatLikesCount(likesCount)}
                       </Text>
                     )}
                   </View>

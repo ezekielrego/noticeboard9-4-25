@@ -51,7 +51,6 @@ export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthe
       // First, try to fetch premium listings
       try {
         const premiumResponse = await socialApi.get('/premium');
-        console.log('Premium API raw:', premiumResponse?.data);
         if (premiumResponse.data.status === 'success' && Array.isArray(premiumResponse.data.data)) {
           const premiumRaw = premiumResponse.data.data;
 
@@ -59,26 +58,22 @@ export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthe
           const normalizeSingle = (listing) => {
             if (!listing) return null;
             try {
-              // Direct object
               const direct = mapListingData(listing);
               if (direct && direct.id) return direct;
             } catch (_) {}
             try {
-              // Wrapped under data
               if (listing.data) {
                 const d = mapListingData(listing.data);
                 if (d && d.id) return d;
               }
             } catch (_) {}
             try {
-              // Wilcity detail often under 'post'
               if (listing.post) {
                 const p = mapListingData(listing.post);
                 if (p && p.id) return p;
               }
             } catch (_) {}
             try {
-              // Sometimes oResults is array or object
               if (Array.isArray(listing.oResults) && listing.oResults[0]) {
                 const a = mapListingData(listing.oResults[0]);
                 if (a && a.id) return a;
@@ -103,23 +98,15 @@ export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthe
             const numericId = Number(p.id);
             if (Number.isFinite(numericId) && numericId > 0) {
               return listingsApi.getListingById(numericId)
-                .then(listing => {
-                  console.log('Premium fetch by id raw:', numericId, listing);
-                  const mapped = normalizeSingle(listing);
-                  console.log('Premium fetch by id mapped:', numericId, mapped);
-                  return mapped;
-                })
+                .then(listing => normalizeSingle(listing))
                 .catch(() => null);
             }
-            // Resolve by name: fetch search and pick exact case-insensitive match
             const title = (p.title || '').trim();
             if (!title) return Promise.resolve(null);
             return listingsApi.searchListings(title)
               .then(resp => {
-                console.log('Premium fetch by title raw:', title, resp);
                 const data = mapListingsResponse(resp);
                 const exact = (data.listings || []).find(l => (l.title || '').trim().toLowerCase() === title.toLowerCase());
-                console.log('Premium fetch by title mapped:', title, exact);
                 return exact || null;
               })
               .catch(() => null);
@@ -131,9 +118,6 @@ export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthe
             .filter(it => it && (typeof it.id === 'string' || Number.isFinite(Number(it.id))))
             .map(it => ({ ...it, isPremium: true }));
 
-          console.log('Premium resolved items:', premiumItems);
-
-          // Track numeric premium IDs to avoid duplicates in regular feed
           premiumIds = new Set(
             premiumItems
               .map(it => Number(it.id))
@@ -143,7 +127,7 @@ export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthe
           allListings = premiumItems;
         }
       } catch (err) {
-        console.log('Premium listings fetch failed:', err);
+        // ignore premium errors
       }
 
       // Then fetch regular listings
@@ -273,7 +257,7 @@ export default function HomeScreen({ navigation, onSearch, requireLogin, isAuthe
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f6fa' }}>
         <ActivityIndicator size="large" color="#0b0c10" />
         <Text style={{ marginTop: 10, color: '#6b7280' }}>
-          {isSearching ? 'Searching...' : 'Loading listings...'}
+          {isSearching ? 'Searching...' : 'Exploring...'}
         </Text>
       </View>
     );

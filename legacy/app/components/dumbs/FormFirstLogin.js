@@ -118,6 +118,9 @@ class FormFirstLogin extends PureComponent {
   _renderGetOtpText = () => {
     const { result } = this.state;
     const { translations, onClickGetOtp } = this.props;
+    if (!translations || !translations.getOtp) {
+      return null;
+    }
     return (
       <TouchableOpacity
         style={styles.textGetOTP}
@@ -214,19 +217,28 @@ class FormFirstLogin extends PureComponent {
             />
             {this._renderGetOtpText()}
           </View>
-          <Button
-            backgroundColor="light"
-            color="dark"
-            colorPrimary={colorPrimary}
-            size="lg"
-            radius="pill"
-            block={true}
-            loadingColor={colorPrimary}
-            isLoading={isLoginLoading}
-            onPress={this._handleLogin}
-          >
-            {translations.login}
-          </Button>
+          <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                backgroundColor="transparent"
+                color="light"
+                colorPrimary={colorPrimary}
+                size="lg"
+                radius="pill"
+                block={true}
+                loadingColor={colorPrimary}
+                isLoading={isLoginLoading}
+                onPress={this._handleLogin}
+                style={{ borderWidth: 1, borderColor: '#fff', backgroundColor: 'transparent' }}
+              >
+                {translations.login}
+              </Button>
+            </View>
+            <View style={{ width: 10 }} />
+            <TouchableOpacity onPress={onSkip} style={{ paddingVertical: 12, paddingHorizontal: 8 }}>
+              <P style={{ color: '#fff' }}>Or Skip</P>
+            </TouchableOpacity>
+          </View>
 
           {settings.isAllowRegistering === "yes" && (
             <Button
@@ -269,15 +281,7 @@ class FormFirstLogin extends PureComponent {
         <View style={styles.background}>
           <Image source={background} resizeMode="cover" style={styles.img} />
         </View>
-        <TouchableOpacity style={styles.skip} onPress={onSkip} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <P style={styles.skipText} numberOfLines={1}>{skipButtonText}</P>
-          <View style={{ width: 4 }} />
-          <FontIcon
-            name={RTL() ? "chevron-left" : "chevron-right"}
-            size={16}
-            color={"#fff"}
-          />
-        </TouchableOpacity>
+        {null}
         {this._renderContent()}
 
         {/* <KeyboardAnimationRP style={{ flex: 1 }}>

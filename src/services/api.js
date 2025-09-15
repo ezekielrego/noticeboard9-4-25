@@ -28,6 +28,27 @@ export function setSocialAuthToken(token) {
   }
 }
 
+// Notifications service
+export async function listNotifications() {
+  const { data } = await socialApi.get('/notifications');
+  return data;
+}
+
+export async function markNotificationsViewed(ids) {
+  const { data } = await socialApi.post('/notifications/mark-viewed', { ids });
+  return data;
+}
+
+export async function getTrendingNotifications() {
+  const { data } = await socialApi.get('/notifications/trending');
+  return data;
+}
+
+export async function getUnreadNotificationsCount() {
+  const { data } = await socialApi.get('/notifications/unread-count');
+  return data;
+}
+
 const CACHE_KEY_HOME = 'cache_home_listings_v1';
 const CACHE_KEY_BUSINESS = 'cache_business_listings_v1';
 const CACHE_KEY_RESTAURANT = 'cache_restaurant_listings_v1';

@@ -36,8 +36,10 @@ export const addComment = async (listingId, text) => {
     if (data.status !== 'success') throw new Error(data.message);
     return data.comment;
   } catch (error) {
-    console.error('Error adding comment:', error);
-    throw error;
+    const serverMsg = error?.response?.data?.detail || error?.response?.data?.message;
+    const err = new Error(serverMsg || error.message || 'Failed to add comment');
+    console.error('Error adding comment:', err);
+    throw err;
   }
 };
 
@@ -71,12 +73,19 @@ export const submitRating = async (listingId, value) => {
   return { average: data.average, userRating: data.userRating };
 };
 
+// Ads
+export const getActiveAds = async () => {
+  await ensureGuestIdentity();
+  const { data } = await socialApi.get('/ads/active');
+  if (data.status !== 'success') throw new Error(data.message);
+  return data; // { enabled, items, config }
+};
+
 // Check if user has liked a listing
 export const checkUserLike = async (listingId) => {
   try {
-    // For now, return false since the check endpoint doesn't exist
-    // This will be implemented when the API supports it
-    return false;
+    const { data } = await socialApi.get(`/listings/${listingId}/likes/me`);
+    return Boolean(data?.liked);
   } catch (error) {
     console.error('Error checking user like:', error);
     return false;

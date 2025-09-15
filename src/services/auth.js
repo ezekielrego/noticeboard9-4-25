@@ -153,4 +153,15 @@ export async function ensureGuestIdentity() {
   return { guestId, guestName };
 }
 
+export async function setGuestName(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return await ensureGuestIdentity();
+  await AsyncStorage.setItem(GUEST_NAME_KEY, trimmed);
+  // Ensure guest ID exists
+  const { guestId } = await ensureGuestIdentity();
+  // Update header immediately so next request uses new name
+  socialApi.defaults.headers.common['X-Guest-Name'] = trimmed;
+  return { guestId, guestName: trimmed };
+}
+
 

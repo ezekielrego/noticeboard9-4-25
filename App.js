@@ -18,10 +18,15 @@ import AccountScreen from './src/screens/AccountScreen';
 import AppLayout from './src/components/AppLayout';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import SlideContainer from './src/components/SlideContainer';
-import { loadSession } from './src/services/auth';
+import { loadSession, ensureGuestIdentity } from './src/services/auth';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import CreateScreen from './src/screens/CreateScreen';
 import PlacesScreen from './src/screens/PlacesScreen';
+import AdsScreen from './src/screens/AdsScreen';
+import { getActiveAds } from './src/services/social';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import { listNotifications, getUnreadNotificationsCount } from './src/services/api';
+import { Linking, AppState } from 'react-native';
 
 export default function App() {
   const [isSkipped, setIsSkipped] = React.useState(false);
@@ -29,31 +34,129 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = React.useState('main');
   const [screenParams, setScreenParams] = React.useState({});
   const [searchHandler, setSearchHandler] = React.useState(() => () => {});
-  const [overlayRoute, setOverlayRoute] = React.useState(null); // { name: 'PostDetail'|'Comments', params }
-  const [loginPrompt, setLoginPrompt] = React.useState(null); // { action: 'like'|'comment'|'account' }
+  const [overlayRoute, setOverlayRoute] = React.useState(null); // { name: 'PostDetail'|'Comments'|'Ads'|'WebView', params }
+  const [loginPrompt, setLoginPrompt] = React.useState(null);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [notificationsCount, setNotificationsCount] = React.useState(0);
 
-  React.useEffect(() => {
-    (async () => {
-      const { token } = await loadSession();
-      if (token) {
-        setIsSkipped(true);
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-      }
-    })();
+  const refreshNotificationsCount = React.useCallback(async () => {
+    try {
+      // Ensure guest identity headers are present for unauthenticated users
+      await ensureGuestIdentity();
+      // Prefer server unread count
+      try {
+        const cntRes = await getUnreadNotificationsCount();
+        if (cntRes?.status === 'success' && typeof cntRes.count === 'number') {
+          setNotificationsCount(Number(cntRes.count) || 0);
+        } else {
+          // Soft fallback below
+        }
+      } catch (_) {}
+      // Fallback to client fetch
+      try {
+        const res = await listNotifications();
+        const items = Array.isArray(res?.data) ? res.data : [];
+        const unViewed = items.filter(n => !n.viewed).length;
+        setNotificationsCount(prev => {
+          // Take the max between API unread-count and local list heuristic
+          return Math.max(Number(prev) || 0, Number(unViewed) || 0);
+        });
+      } catch (_) {}
+    } catch (_) {}
   }, []);
 
-  // Keep auth flag roughly in sync when returning from login/register
+  // Global ads config/state
+  const [adsEnabled, setAdsEnabled] = React.useState(false);
+  const [adsConfig, setAdsConfig] = React.useState({ switchSeconds: 30 });
+  const [lastAdShownAt, setLastAdShownAt] = React.useState(0);
+
+  React.useEffect(() => {
+    // Handle deep links like noticeboard://listing/123
+    const onUrl = ({ url }) => {
+      try {
+        let segments = [];
+        try {
+          const u = new URL(url);
+          const path = (u.pathname || '').replace(/^\/+/, '');
+          segments = path.split('/');
+        } catch (_) {
+          // Fallback simple parser: noticeboard://listing/123
+          const m = url.replace(/^.*?:\/\//, '').split('/');
+          segments = m.slice(1);
+        }
+        if (segments[0] === 'listing' && segments[1]) {
+          const lid = Number(segments[1]);
+          if (!Number.isNaN(lid)) setOverlayRoute({ name: 'PostDetail', params: { listingId: lid } });
+        }
+      } catch (_) {}
+    };
+    const sub = Linking.addEventListener('url', onUrl);
+    (async () => {
+      const initial = await Linking.getInitialURL();
+      if (initial) onUrl({ url: initial });
+    })();
+    return () => { try { sub.remove(); } catch (_) {} };
+  }, []);
   React.useEffect(() => {
     (async () => {
       const { token } = await loadSession();
       setIsAuthenticated(!!token);
+      // Refresh count after session/guest is fully initialized
+      await refreshNotificationsCount();
     })();
   }, [isSkipped]);
 
-  // Android back handling
+  // Refresh notifications count when app returns to foreground
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshNotificationsCount();
+      }
+    });
+    return () => { try { sub.remove(); } catch (_) {} };
+  }, [refreshNotificationsCount]);
+
+  // Fetch ads config once and whenever app starts
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const data = await getActiveAds();
+        setAdsEnabled(Boolean(data?.enabled));
+        if (data?.config?.switchSeconds) {
+          setAdsConfig({ switchSeconds: Number(data.config.switchSeconds) || 30 });
+        }
+        if (data?.enabled && Array.isArray(data.items) && data.items.length > 0) {
+          // Optionally show first ad on cold start
+          setOverlayRoute((curr) => curr ? curr : { name: 'Ads' });
+        }
+      } catch (_) {}
+    })();
+    // Also attempt a delayed refresh on app start as a fallback
+    setTimeout(() => { refreshNotificationsCount(); }, 1500);
+  }, []);
+
+  // Global scheduler: trigger ads anywhere after wait time if no overlay is currently shown
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (!adsEnabled) return;
+      if (overlayRoute) return; // do not interrupt modals
+      const waitMs = Math.max(2, Number(adsConfig.switchSeconds) || 30) * 1000;
+      if (Date.now() - lastAdShownAt >= waitMs) {
+        setOverlayRoute({ name: 'Ads' });
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [adsEnabled, adsConfig.switchSeconds, overlayRoute, lastAdShownAt]);
+
+  // Poll unread notifications count every 30 seconds
+  React.useEffect(() => {
+    const poll = setInterval(() => {
+      refreshNotificationsCount();
+    }, 30000);
+    return () => clearInterval(poll);
+  }, [refreshNotificationsCount]);
+
+  // Back handling
   React.useEffect(() => {
     const backAction = () => {
       if (overlayRoute) {
@@ -67,7 +170,6 @@ export default function App() {
         setActiveTab('home');
         return true;
       } else {
-        // Exit app
         BackHandler.exitApp();
         return true;
       }
@@ -81,8 +183,18 @@ export default function App() {
     setOverlayRoute({ name: 'PostDetail', params: params || {} });
   };
 
+  const openNotifications = () => {
+    setOverlayRoute({ name: 'Notifications' });
+    // When opening, we will mark as viewed inside screen; refresh badge after a short delay
+    setTimeout(() => { refreshNotificationsCount(); }, 1000);
+  };
+
   const goBack = () => {
     if (overlayRoute) {
+      // If closing ads, record last shown time
+      if (overlayRoute.name === 'Ads') {
+        setLastAdShownAt(Date.now());
+      }
       setOverlayRoute(null);
     } else {
     setCurrentScreen('main');
@@ -163,6 +275,8 @@ export default function App() {
                 setCurrentScreen('search');
                 setScreenParams({ query: qStr });
               }}
+              onOpenNotifications={openNotifications}
+              notificationsCount={notificationsCount}
             >
               <SlideContainer direction={'forward'}>
                 <SearchScreen 
@@ -221,6 +335,8 @@ export default function App() {
               setScreenParams({ query: qStr });
             }}
             hideTopBar={activeTab === 'webview'}
+            onOpenNotifications={openNotifications}
+            notificationsCount={notificationsCount}
           >
             <SlideContainer direction={'forward'}>
               {activeTab === 'home' && (
@@ -349,14 +465,14 @@ export default function App() {
 
           {/* Overlay route: keeps underlying screens mounted */}
           {!!overlayRoute && (
-            <Modal visible transparent animationType="slide" onRequestClose={() => setOverlayRoute(null)}>
-              <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+            <Modal visible transparent animationType="slide" onRequestClose={goBack}>
+              <View style={{ flex: 1, backgroundColor: overlayRoute.name === 'Ads' ? '#000' : '#ffffff' }}>
                 <SlideContainer direction={'forward'}>
                   {overlayRoute.name === 'PostDetail' ? (
                     <PostDetailScreen
                       route={{ params: overlayRoute.params }}
                       navigation={{
-                        goBack: () => setOverlayRoute(null),
+                        goBack,
                         navigate: (screen, params) => {
                           if (screen === 'Comments') {
                             setOverlayRoute({ name: 'Comments', params: params || {} });
@@ -371,7 +487,7 @@ export default function App() {
                       <CommentsScreen
                         route={{ params: overlayRoute.params }}
                         navigation={{
-                          goBack: () => setOverlayRoute(null),
+                          goBack,
                           navigate: (screen, params) => {
                             if (screen === 'PostDetail') {
                               setOverlayRoute({ name: 'PostDetail', params: params || {} });
@@ -381,6 +497,25 @@ export default function App() {
                         }}
                       />
                     ); })()
+                  ) : null}
+                  {overlayRoute.name === 'Notifications' ? (
+                    <NotificationsScreen 
+                      navigation={{ 
+                        goBack, 
+                        navigate: (screen, params) => { 
+                          if (screen === 'PostDetail') {
+                            setOverlayRoute({ name: 'PostDetail', params: params || {} });
+                          }
+                        }
+                      }} 
+                      onViewedAll={() => { refreshNotificationsCount(); }}
+                    />
+                  ) : null}
+                  {overlayRoute.name === 'Ads' ? (
+                    <AdsScreen navigation={{ goBack, navigate: (screen, params) => { if (screen === 'WebView') setOverlayRoute({ name: 'WebView', params }); } }} />
+                  ) : null}
+                  {overlayRoute.name === 'WebView' ? (
+                    <WebViewScreen route={{ params: overlayRoute.params }} navigation={{ goBack }} />
                   ) : null}
                 </SlideContainer>
               </View>
